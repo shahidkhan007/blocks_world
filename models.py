@@ -197,3 +197,4 @@ if __name__ == "__main__":
     t = Table((200, 200), (6, 4))
     boxes = [Box((i, j), t) for i, j in [(0, 0), (5, 3)]]
     t.event_loop()
+    # I made this change in test branch
