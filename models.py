@@ -22,6 +22,10 @@ class Table:
         self.hand_motion_bias_x = 0  # these var is used to move the hand
         self.hand_motion_bias_y = 0
         self.hand_motion_bias = (self.hand_motion_bias_x, self.hand_motion_bias_y)
+        self.hand_loc = np.array((0, 0))  # means its 50 pixels above the table on its first column
+
+        # The xy format is a format in which values mean (got this units in x-axis, go this units in y-axis) while row x column format means
+        # (go this many rows in the table, go this many columns in the table)
 
     def get_col(self, column):
         """Returns the requested column from the table"""
@@ -36,7 +40,7 @@ class Table:
         return self.table[element[0], element[1]]
     
     def get_index(self, element):
-        """Returns the index for element from the table"""
+        """Returns the index for element from the table in Row x Column format"""
         for i, row in enumerate(self.table):
             for j, e in enumerate(row):
                 if e == element:
@@ -44,7 +48,7 @@ class Table:
     
     def put(self, box, location, insert=False):
         """takes the box from its current location if available
-         and puts it at location in the table if possible. Returns nothing"""
+         and puts it at location in the table if possible. Returns nothing. if insert is True, the box is simply put in the table"""
         if insert:
             self.table[location] = box
             return
@@ -81,10 +85,10 @@ class Table:
 
         # Hand
         hand_line_1, hand_line_2, hand_line_3, hand_line_4 = self.create_hand_structure()
-        pygame.draw.line(self.surface, color['blue'], *hand_line_1, 4)
-        pygame.draw.line(self.surface, color['blue'], *hand_line_2, 4)
-        pygame.draw.line(self.surface, color['blue'], *hand_line_3, 4)
-        pygame.draw.line(self.surface, color['blue'], *hand_line_4, 4)
+        pygame.draw.line(self.surface, color['red'], *hand_line_1, 4)
+        pygame.draw.line(self.surface, color['red'], *hand_line_2, 4)
+        pygame.draw.line(self.surface, color['red'], *hand_line_3, 4)
+        pygame.draw.line(self.surface, color['red'], *hand_line_4, 4)
     
     def create_hand_structure(self):
         """Creates the structure of hand and returns it for the render function to render it"""
@@ -128,6 +132,7 @@ class Table:
             Box.render_all_boxes()
             self.render()
             pygame.display.update()
+        self.hand_loc += np.array([int(magnitude/direction_int[0]), int(magnitude/direction_int[1])])
     
     def attach_to_hand(self, box):
         t.table[box.loc] = None
@@ -137,16 +142,29 @@ class Table:
         t.table[box.loc] = box
         t.in_hand = None
 
+    def pick_up(self, box):
+        box_loc = self.get_index(box)
+        x = self.box_size * (box_loc[0] - self.hand_loc[0])  # got this magnitude in direction dir1
+        dir1 = 'R' if x >= 0 else 'L'
+        y = 75 + self.box_size * box_loc[1]
+        dir2 = 'D'
+        self.move_hand(x, dir1)
+        self.move_hand(y, dir2)
+        self.attach_to_hand(box)
+        self.move_hand(y, 'U')
+
     def event_loop(self):
         self.surface = pygame.display.set_mode((800, 600))
-        self.move_hand(75, 'D')
-        self.attach_to_hand(Box.boxes[0])
-        self.move_hand(75, 'U')
-        self.move_hand(50, 'R')
-        self.move_hand(75, 'D')
-        self.un_attach_from_hand(Box.boxes[0])
-        self.move_hand(75, 'U')
-        self.move_hand(50, 'L')
+        # self.move_hand(75, 'D')
+        # self.attach_to_hand(Box.boxes[0])
+        # self.move_hand(75, 'U')
+        # self.move_hand(50, 'R')
+        # self.move_hand(75, 'D')
+        # self.un_attach_from_hand(Box.boxes[0])
+        # self.move_hand(75, 'U')
+        # self.move_hand(50, 'L')
+        self.move_hand(100, 'R')
+        self.pick_up(Box.boxes[0])
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -165,8 +183,9 @@ class Box:
     boxes = []
     boxes_names = []
     def __init__(self, loc: tuple or list, table: Table, name=None):
-        self.loc = np.array(loc)
-        self.pxloc = self.size * self.loc + table.loc
+        self.loc = np.array(loc)  # location of the box in table in Row x Columnn format
+        self.loc_xy = np.array([self.loc[1], self.loc[0]])  # location of the box in table in x-axis, y-axis format
+        self.pxloc = self.size * self.loc_xy + table.loc  # pixel location of the box in table in Row x Columnn format
         self.table = table
         self.box_motion_bias_x = 0
         self.box_motion_bias_y = 0
@@ -180,21 +199,38 @@ class Box:
                 print(f"Box with name {name} already exists thus it was named {self.name}")
             else: self.name = name
         self.boxes_names.append(self.name)
+        self.table.put(self, loc, insert=True)
 
-    
     def render(self):
         box = [self.pxloc[0] + self.box_motion_bias_x, self.pxloc[1] + self.box_motion_bias_y, self.size, self.size]
         pygame.draw.rect(self.table.surface, color['blue'], box)
     
+    @property
+    def index(self):
+        return self.table.get_index(self)
+    
+    def top_is_clear(self):
+        my_column = self.table.get_col(self.index[1])
+        for b in my_column[:self.index[0]]:  # searching through the column until this box reaches to find if there is anything on top of it
+            if b is not None:
+                return False
+        else:
+            return True
+
     @classmethod
     def render_all_boxes(cls):
         for box in cls.boxes:
             box.render()
     
+    def __repr__(self):
+        return "Box " + str(self.name)
+    
     
 
 if __name__ == "__main__":
     t = Table((200, 200), (6, 4))
-    boxes = [Box((i, j), t) for i, j in [(0, 0), (5, 3)]]
+    boxes = [Box((i, j), t) for i, j in [(0, 0), (1, 0)]]
+    # print(t.table)
+    # print(boxes[0].top_is_clear())
     t.event_loop()
-    # I made this change in test branch
+    # TODO Figure out the actual move of hand from hand_loc to some other co-ordinates in the move_hand function
