@@ -39,7 +39,7 @@ class Table:
         """Returns the requested element from the table"""
         return self.table[element[0], element[1]]
     
-    def get_index(self, element):
+    def get_index(self, element):  # Also means loc/ocation in the table
         """Returns the index for element from the table in Row x Column format"""
         for i, row in enumerate(self.table):
             for j, e in enumerate(row):
@@ -132,25 +132,55 @@ class Table:
             Box.render_all_boxes()
             self.render()
             pygame.display.update()
-        self.hand_loc += np.array([int(magnitude/direction_int[0]), int(magnitude/direction_int[1])])
+        
+        # This is the motion of hand in the grid/table via hand_loc. The above is graphical motion
+        x = int(magnitude / self.box_size * direction_int[0])
+        y = int(magnitude / self.box_size * direction_int[1])
+        self.hand_loc += np.array([x, y])
     
     def attach_to_hand(self, box):
-        t.table[box.loc] = None
-        t.in_hand = box
+        """Takes a box from the table and puts it in in_hand variable"""
+        self.table[box.loc] = None
+        self.in_hand = box
     
-    def un_attach_from_hand(self, box):
-        t.table[box.loc] = box
-        t.in_hand = None
+    def un_attach_from_hand(self):
+        """Takes the box in in_hand variable and puts it back in the table at location hand_loc.
+        Remember: this function zeros all the motion biases and updates the loc"""
+        self.table[self.hand_loc] = self.in_hand
+        self.in_hand.loc = self.hand_loc
+        self.in_hand = None
 
     def pick_up(self, box):
+        """Picks up a box"""
         box_loc = self.get_index(box)
         x = self.box_size * (box_loc[0] - self.hand_loc[0])  # got this magnitude in direction dir1
         dir1 = 'R' if x >= 0 else 'L'
+        x = abs(x)
         y = 75 + self.box_size * box_loc[1]
         dir2 = 'D'
+        y = abs(y)
         self.move_hand(x, dir1)
         self.move_hand(y, dir2)
         self.attach_to_hand(box)
+        self.move_hand(y, 'U')
+    
+    def put_down(self, location):
+        """Puts down the box in in_hand variable at hand_loc"""
+        location = [location[1], location[0]]  # Converting co-ordinates from row x column to (x-axis, y-axis)
+        if self.in_hand is None:
+            raise ValueError("No Box in hand to move!")
+
+        x = self.box_size * (location[0] - self.hand_loc[0])
+        dir1 = 'R' if x >= 0 else 'L'
+        x = abs(x)
+
+        y = 75 + self.box_size * location[1]
+        dir2 = 'D'
+        y = abs(y)
+
+        self.move_hand(x, dir1)
+        self.move_hand(y, dir2)
+        self.un_attach_from_hand()
         self.move_hand(y, 'U')
 
     def event_loop(self):
@@ -165,6 +195,7 @@ class Table:
         # self.move_hand(50, 'L')
         self.move_hand(100, 'R')
         self.pick_up(Box.boxes[0])
+        self.put_down([3, 5])
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -183,7 +214,7 @@ class Box:
     boxes = []
     boxes_names = []
     def __init__(self, loc: tuple or list, table: Table, name=None):
-        self.loc = np.array(loc)  # location of the box in table in Row x Columnn format
+        self.loc = np.array(loc)  # location of the box in table in Row x Columnn format, updated manually to allow for animation
         self.loc_xy = np.array([self.loc[1], self.loc[0]])  # location of the box in table in x-axis, y-axis format
         self.pxloc = self.size * self.loc_xy + table.loc  # pixel location of the box in table in Row x Columnn format
         self.table = table
@@ -207,15 +238,21 @@ class Box:
     
     @property
     def index(self):
+        """Return s the immediate position of the box in the table, returns none if in hand"""
         return self.table.get_index(self)
     
     def top_is_clear(self):
+        """Finds if its top is clear"""
         my_column = self.table.get_col(self.index[1])
         for b in my_column[:self.index[0]]:  # searching through the column until this box reaches to find if there is anything on top of it
             if b is not None:
                 return False
         else:
             return True
+    
+    def find_space(self, goal_seq):
+        """Finds an empty slot in the table such that the slot is not on of the ones in goal_seq(Goal sequence)"""
+        
 
     @classmethod
     def render_all_boxes(cls):
