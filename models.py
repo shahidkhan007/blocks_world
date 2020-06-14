@@ -4,7 +4,7 @@ pygame.font.init()
 
 color = {
     'green': (0, 255, 0),
-    'black': (0, 0, 0),
+    'bg': (128, 128, 128),
     'blue': (0, 0, 255),
     'red': (255, 0, 0)
 }
@@ -24,7 +24,6 @@ class Table:
         self.hand_motion_bias_y = 0
         self.hand_motion_bias = (self.hand_motion_bias_x, self.hand_motion_bias_y)
         self.hand_loc = np.array((0, 0))  # means its 50 pixels above the table on its first column
-        self.goal_seq = []
 
         # The xy format is a format in which values mean (got this units in x-axis, go this units in y-axis) while row x column format means
         # (go this many rows in the table, go this many columns in the table)
@@ -52,17 +51,17 @@ class Table:
         """takes the box from its current location if available
          and puts it at location in the table if possible. Returns nothing. if insert is True, the box is simply put in the table"""
         if insert:
-            self.table[location] = box
+            self.table[location[0], location[1]] = box
             return
 
         box_index = self.get_index(box)
-        if self.table[box_index] is None:
+        if self.table[box_index[0], box_index[1]] is None:
             raise IndexError(f"No box at {location} to carry.")
-        else: self.table[box_index] = None
+        else: self.table[box_index[0], box_index[1]] = None
 
-        if self.table[location] is not None:
-            raise IndexError(f"Another box: {self.table[location]} already at {location}.")
-        else: self.table[location] = box
+        if self.table[location[0], location[1]] is not None:
+            raise IndexError(f"Another box: {self.table[location[0], location[1]]} already at {location}.")
+        else: self.table[location[0], location[1]] = box
     
     def create_table_structure(self):
         """Creates the structure of the table and returns it for the render function to render it"""
@@ -130,7 +129,7 @@ class Table:
                 self.in_hand.box_motion_bias_y += step_size * direction_int[1]
 
             self.hand_motion_bias += step_size * direction_int
-            self.surface.fill(color['black'])
+            self.surface.fill(color['bg'])
             Box.render_all_boxes()
             self.render()
             pygame.display.update()
@@ -143,7 +142,7 @@ class Table:
     def attach_to_hand(self, box):
         """Takes a box from the table and puts it in in_hand variable"""
         self.in_hand = box
-        self.table[box.loc[0], box.loc[1]] = None
+        self.table[box.index[0], box.index[1]] = None
    
     def un_attach_from_hand(self):
         """Takes the box in in_hand variable and puts it back in the table at location hand_loc.
@@ -208,34 +207,58 @@ class Table:
         else:
             raise Exception("No more space!")
 
-    def clear_top(self, box):
+    def clear_top(self, box, goal_sequence):
         box_column = list(self.get_col(box.index[1]))
         box_row = box_column[:box.index[0]]
         boxes_above = [x for x in box_row if x]
         for b in boxes_above:
             self.pick_up(b)
-            space = self.find_space([box.loc[1], 2])
+            space = self.find_space(goal_sequence)
             self.put_down(space)
+
+    def put_on(self, box_1, box_2):
+        """Puts box_1 on top of box_2 if possible.
+        First it clears the top of box_1 and then that of box_2 and then puts box_1 on top of box_2"""
+
+        goal_seq = [box_1.loc[1], box_2.loc[1]]
+        # Check if box_2 is not at the top of its column
+        if box_2.loc[0] == 0:
+            return
+        elif box_1.loc[1] == box_2.loc[1] and box_1.loc[0] < box_2.loc[0]:
+            return
+
+        try:
+            # clear the top of box_2
+            self.clear_top(box_2, goal_seq)
+
+            # clear top of box_1
+            self.clear_top(box_1, goal_seq)
+        except Exception as e:
+            print(e)
+            return
+
+        # If not, performing the move
+        self.pick_up(box_1)
+        self.put_down([box_2.index[0]-1, box_2.index[1]])
 
     def event_loop(self):
         self.surface = pygame.display.set_mode((800, 600))
-        print(boxes[3])
-        self.clear_top(boxes[2])
-        
-        print(self.table, self.table.shape)
 
+        self.put_on(boxes['B3'], boxes['B2'])
+        self.put_on(boxes['B2'], boxes['B3'])
+        
+        pygame.time.Clock(300)
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     quit()
 
-            self.surface.fill(color['black'])
+            self.surface.fill(color['bg'])
             Box.render_all_boxes()
             self.render()
             
             pygame.display.update()
-
 
 class Box:
     size = 50
@@ -263,7 +286,7 @@ class Box:
     def render(self):
         box = [self.pxloc[0] + self.box_motion_bias_x, self.pxloc[1] + self.box_motion_bias_y, self.size, self.size]
         pygame.draw.rect(self.table.surface, color['blue'], box)
-        self.write_text(str(self.name), 24, (50, 50, 50), (self.pxloc[0]+5+self.box_motion_bias_x, self.pxloc[1]+10+self.box_motion_bias_y))
+        self.write_text(str(self), 24, (50, 50, 50), (self.pxloc[0]+10+self.box_motion_bias_x, self.pxloc[1]+10+self.box_motion_bias_y))
     
     @property
     def index(self):
@@ -297,7 +320,5 @@ class Box:
 if __name__ == "__main__":
     t = Table((200, 200), (4, 6))
     boxes = [Box((i, j), t) for i, j in [(3, 0), (3, 1), (3, 2), (2, 0), (2, 1), (2, 2), (1, 1), (1, 2), (0, 2)]]
-    # print(t.table)
-    # print(boxes[0].top_is_clear())
+    boxes = {str(x): x for x in boxes}
     t.event_loop()
-    # TODO Figure out the actual move of hand from hand_loc to some other co-ordinates in the move_hand function
