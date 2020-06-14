@@ -1,5 +1,6 @@
 import numpy as np
 import pygame
+pygame.font.init()
 
 color = {
     'green': (0, 255, 0),
@@ -23,23 +24,24 @@ class Table:
         self.hand_motion_bias_y = 0
         self.hand_motion_bias = (self.hand_motion_bias_x, self.hand_motion_bias_y)
         self.hand_loc = np.array((0, 0))  # means its 50 pixels above the table on its first column
+        self.goal_seq = []
 
         # The xy format is a format in which values mean (got this units in x-axis, go this units in y-axis) while row x column format means
         # (go this many rows in the table, go this many columns in the table)
 
     def get_col(self, column):
         """Returns the requested column from the table"""
-        return self.table[:, column]   
+        return self.table[:, column].copy()   
 
     def get_row(self, row): 
         """Returns the requested row from the table"""
-        return self.table[row]
+        return self.table[row].copy()
     
     def get_element(self, element: tuple or list or np.array):
         """Returns the requested element from the table"""
         return self.table[element[0], element[1]]
     
-    def get_index(self, element):  # Also means loc/ocation in the table
+    def get_index(self, element):
         """Returns the index for element from the table in Row x Column format"""
         for i, row in enumerate(self.table):
             for j, e in enumerate(row):
@@ -64,8 +66,8 @@ class Table:
     
     def create_table_structure(self):
         """Creates the structure of the table and returns it for the render function to render it"""
-        height_1 = self.box_size * self.size[1]
-        width_1 = self.box_size * self.size[0]
+        height_1 = self.box_size * self.size[0]
+        width_1 = self.box_size * self.size[1]
 
         line_1 = [self.loc, (self.loc[0], self.loc[1] + height_1)]  # [start_pos, end_pos]
 
@@ -140,29 +142,33 @@ class Table:
     
     def attach_to_hand(self, box):
         """Takes a box from the table and puts it in in_hand variable"""
-        self.table[box.loc] = None
         self.in_hand = box
-    
+        self.table[box.loc[0], box.loc[1]] = None
+   
     def un_attach_from_hand(self):
         """Takes the box in in_hand variable and puts it back in the table at location hand_loc.
         Remember: this function zeros all the motion biases and updates the loc"""
-        self.table[self.hand_loc] = self.in_hand
+        self.table[self.hand_loc[1]-1, self.hand_loc[0]] = self.in_hand
         self.in_hand.loc = self.hand_loc
         self.in_hand = None
 
     def pick_up(self, box):
         """Picks up a box"""
-        box_loc = self.get_index(box)
+        box_loc = self.get_index(box)  # location in (row x column) format
+        box_loc = (box_loc[1], box_loc[0])  # location in (x-axis, y-axis) format
+
         x = self.box_size * (box_loc[0] - self.hand_loc[0])  # got this magnitude in direction dir1
         dir1 = 'R' if x >= 0 else 'L'
         x = abs(x)
+
         y = 75 + self.box_size * box_loc[1]
         dir2 = 'D'
         y = abs(y)
+        
         self.move_hand(x, dir1)
         self.move_hand(y, dir2)
         self.attach_to_hand(box)
-        self.move_hand(y, 'U')
+        self.move_hand(y, 'U')   
     
     def put_down(self, location):
         """Puts down the box in in_hand variable at hand_loc"""
@@ -183,19 +189,41 @@ class Table:
         self.un_attach_from_hand()
         self.move_hand(y, 'U')
 
+    def find_space(self, goal_seq):
+        """Finds an empty slot in the table such that the slot is not on of the ones in goal_seq(Goal sequence).
+        Goal sequence has two elements. column numbers of the places where we dont want the box to go.
+        Returns the empty slot in (Row x Column) format"""
+        for i in range(self.size[1]):
+            if i in goal_seq:
+                continue
+            column = self.get_col(i)
+            for j, element in enumerate(column):
+                if element is not None:
+                    if j == 0:
+                        break
+                    return (j-1, i)
+
+                elif j == len(column)-1:
+                    return (j, i)
+        else:
+            raise Exception("No more space!")
+
+    def clear_top(self, box):
+        box_column = list(self.get_col(box.index[1]))
+        box_row = box_column[:box.index[0]]
+        boxes_above = [x for x in box_row if x]
+        for b in boxes_above:
+            self.pick_up(b)
+            space = self.find_space([box.loc[1], 2])
+            self.put_down(space)
+
     def event_loop(self):
         self.surface = pygame.display.set_mode((800, 600))
-        # self.move_hand(75, 'D')
-        # self.attach_to_hand(Box.boxes[0])
-        # self.move_hand(75, 'U')
-        # self.move_hand(50, 'R')
-        # self.move_hand(75, 'D')
-        # self.un_attach_from_hand(Box.boxes[0])
-        # self.move_hand(75, 'U')
-        # self.move_hand(50, 'L')
-        self.move_hand(100, 'R')
-        self.pick_up(Box.boxes[0])
-        self.put_down([3, 5])
+        print(boxes[3])
+        self.clear_top(boxes[2])
+        
+        print(self.table, self.table.shape)
+
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -235,10 +263,11 @@ class Box:
     def render(self):
         box = [self.pxloc[0] + self.box_motion_bias_x, self.pxloc[1] + self.box_motion_bias_y, self.size, self.size]
         pygame.draw.rect(self.table.surface, color['blue'], box)
+        self.write_text(str(self.name), 24, (50, 50, 50), (self.pxloc[0]+5+self.box_motion_bias_x, self.pxloc[1]+10+self.box_motion_bias_y))
     
     @property
     def index(self):
-        """Return s the immediate position of the box in the table, returns none if in hand"""
+        """Returns the immediate position of the box in the table, returns none if in hand"""
         return self.table.get_index(self)
     
     def top_is_clear(self):
@@ -249,10 +278,11 @@ class Box:
                 return False
         else:
             return True
-    
-    def find_space(self, goal_seq):
-        """Finds an empty slot in the table such that the slot is not on of the ones in goal_seq(Goal sequence)"""
-        
+
+    def write_text(self, text: str, size: int, color: tuple, loc: tuple):
+        font = pygame.font.SysFont("comicsansms", size)
+        text = font.render(text, True, color)
+        self.table.surface.blit(text, loc)
 
     @classmethod
     def render_all_boxes(cls):
@@ -260,13 +290,13 @@ class Box:
             box.render()
     
     def __repr__(self):
-        return "Box " + str(self.name)
+        return "B" + str(self.name)
     
     
 
 if __name__ == "__main__":
-    t = Table((200, 200), (6, 4))
-    boxes = [Box((i, j), t) for i, j in [(0, 0), (1, 0)]]
+    t = Table((200, 200), (4, 6))
+    boxes = [Box((i, j), t) for i, j in [(3, 0), (3, 1), (3, 2), (2, 0), (2, 1), (2, 2), (1, 1), (1, 2), (0, 2)]]
     # print(t.table)
     # print(boxes[0].top_is_clear())
     t.event_loop()
