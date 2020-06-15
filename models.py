@@ -4,9 +4,18 @@ pygame.font.init()
 
 color = {
     'green': (0, 255, 0),
-    'bg': (128, 128, 128),
-    'blue': (0, 0, 255),
-    'red': (255, 0, 0)
+    'bg': (201, 145, 127),
+    'red': (255, 0, 0),  
+}
+
+box_color = {
+    'crimson': (237, 20, 61),
+    'blue': (0, 129, 255),
+    'dark_purple': (0, 19, 36),
+    'sky_orange': (200, 172, 168),
+    'orange': (245, 67, 27),
+    'blueish' : (42, 39, 117),
+    'pinky' : (218, 66, 136)
 }
 
 class Table:
@@ -24,6 +33,7 @@ class Table:
         self.hand_motion_bias_y = 0
         self.hand_motion_bias = (self.hand_motion_bias_x, self.hand_motion_bias_y)
         self.hand_loc = np.array((0, 0))  # means its 50 pixels above the table on its first column
+        self.goal_tree = []
 
         # The xy format is a format in which values mean (got this units in x-axis, go this units in y-axis) while row x column format means
         # (go this many rows in the table, go this many columns in the table)
@@ -247,7 +257,7 @@ class Table:
         self.put_on(boxes['B3'], boxes['B2'])
         self.put_on(boxes['B2'], boxes['B3'])
         
-        pygame.time.Clock(300)
+        pygame.time.Clock()
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -264,7 +274,7 @@ class Box:
     size = 50
     boxes = []
     boxes_names = []
-    def __init__(self, loc: tuple or list, table: Table, name=None):
+    def __init__(self, loc: tuple or list, table: Table, name=None, color=None):
         self.loc = np.array(loc)  # location of the box in table in Row x Columnn format, updated manually to allow for animation
         self.loc_xy = np.array([self.loc[1], self.loc[0]])  # location of the box in table in x-axis, y-axis format
         self.pxloc = self.size * self.loc_xy + table.loc  # pixel location of the box in table in Row x Columnn format
@@ -273,6 +283,8 @@ class Box:
         self.box_motion_bias_y = 0
         self.box_motion_bias = np.array((self.box_motion_bias_x, self.box_motion_bias_y))
         self.boxes.append(self)
+        self.color = np.random.choice(list(box_color.keys()))
+
         if name is None:
             self.name = self.boxes_names[-1] + 1 if len(self.boxes_names) > 0 else 1
         else: 
@@ -285,7 +297,7 @@ class Box:
 
     def render(self):
         box = [self.pxloc[0] + self.box_motion_bias_x, self.pxloc[1] + self.box_motion_bias_y, self.size, self.size]
-        pygame.draw.rect(self.table.surface, color['blue'], box)
+        pygame.draw.rect(self.table.surface, box_color[self.color], box)
         self.write_text(str(self), 24, (50, 50, 50), (self.pxloc[0]+10+self.box_motion_bias_x, self.pxloc[1]+10+self.box_motion_bias_y))
     
     @property
@@ -315,7 +327,7 @@ class Box:
     def __repr__(self):
         return "B" + str(self.name)
     
-    
+
 
 if __name__ == "__main__":
     t = Table((200, 200), (4, 6))
