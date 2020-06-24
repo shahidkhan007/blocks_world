@@ -1,23 +1,8 @@
 import numpy as np
 import pygame
-import re
+from box import Box
+from . import color
 pygame.font.init()
-
-color = {
-    'green': (0, 255, 0),
-    'bg': (201, 145, 127),
-    'red': (255, 0, 0),  
-}
-
-box_color = {
-    'crimson': (237, 20, 61),
-    'blue': (0, 129, 255),
-    'dark_purple': (0, 19, 36),
-    'sky_orange': (200, 172, 168),
-    'orange': (245, 67, 27),
-    'blueish' : (42, 39, 117),
-    'pinky' : (218, 66, 136)
-}
 
 class Table:
     def __init__(self, loc, size):
@@ -262,12 +247,12 @@ class Table:
         self.put_down([box_2.index[0]-1, box_2.index[1]])
         self.goal_tree.append(['move', [str(box_1), str([box_2.index[0]-1, box_2.index[1]])]])
 
-    def event_loop(self):
+    def event_loop(self, interface, boxes):
         """This is where all the action happens"""
         self.surface = pygame.display.set_mode((800, 600))
 
         self.put_on(boxes['B2'], boxes['B3'])
-        interaface.question_aire()
+        interface.question_aire()
         
         while True:
             self.clock.tick(300)
@@ -281,208 +266,3 @@ class Table:
             self.render()
             
             pygame.display.update()
-
-
-class Box:
-    size = 50
-    boxes = []
-    boxes_names = []
-    def __init__(self, loc: tuple or list, table: Table, name=None, color=None):
-        self.loc = np.array(loc)  # location of the box in table in Row x Columnn format, updated manually to allow for animation
-        self.loc_xy = np.array([self.loc[1], self.loc[0]])  # location of the box in table in x-axis, y-axis format
-        self.pxloc = self.size * self.loc_xy + table.loc  # pixel location of the box in table in Row x Columnn format
-        self.table = table
-        self.box_motion_bias_x = 0
-        self.box_motion_bias_y = 0
-        self.box_motion_bias = np.array((self.box_motion_bias_x, self.box_motion_bias_y))
-        self.boxes.append(self)
-        self.color = np.random.choice(list(box_color.keys()))
-
-        if name is None:
-            self.name = self.boxes_names[-1] + 1 if len(self.boxes_names) > 0 else 1
-        else: 
-            if name in self.boxes_names:
-                self.name = self.boxes_names[-1] + 1
-                print(f"Box with name {name} already exists thus it was named {self.name}")
-            else: self.name = name
-        self.boxes_names.append(self.name)
-        self.table.put(self, loc, insert=True)
-
-    def render(self):
-        box = [self.pxloc[0] + self.box_motion_bias_x, self.pxloc[1] + self.box_motion_bias_y, self.size, self.size]
-        pygame.draw.rect(self.table.surface, box_color[self.color], box)
-        self.write_text(str(self), 24, (50, 50, 50), (self.pxloc[0]+10+self.box_motion_bias_x, self.pxloc[1]+10+self.box_motion_bias_y))
-    
-    @property
-    def index(self):
-        """Returns the immediate position of the box in the table, returns none if in hand"""
-        return self.table.get_index(self)
-    
-    def top_is_clear(self):
-        """Finds if its top is clear"""
-        my_column = self.table.get_col(self.index[1])
-        for b in my_column[:self.index[0]]:  # searching through the column until this box reaches to find if there is anything on top of it
-            if b is not None:
-                return False
-        else:
-            return True
-
-    def write_text(self, text: str, size: int, color: tuple, loc: tuple):
-        font = pygame.font.SysFont("comicsansms", size)
-        text = font.render(text, True, color)
-        self.table.surface.blit(text, loc)
-
-    @classmethod
-    def render_all_boxes(cls):
-        for box in cls.boxes:
-            box.render()
-    
-    def __repr__(self):
-        return "B" + str(self.name)
-    
-
-class Interface:
-    def __init__(self, table):
-        self.table = table
-        self.goal_tree = self.table.goal_tree
-        self.box_names = Box.boxes_names
-
-    def parse_question(self, question: str):
-        """This method parses the queston and creates a dictionary that describes the question. Its type, objective and components"""
-        parsed = {}
-        question = question.lower().split(' ')
-
-        # Determine the type of question
-        if 'how' in question:
-            parsed['type'] = 'how'
-        elif 'why' in question:
-            parsed['type'] = 'why'
-        else:
-            parsed['type'] = None
-            return parsed
-        
-        # Determine the objective of the question
-        if 'put' in question:
-            parsed['obj'] = 'put_on'
-        elif 'clear' in question and 'top' in question:
-            parsed['obj'] = 'clt'
-        elif parsed['type'] == 'why' and 'move' in question:
-            parsed['obj'] = 'move'
-        else:
-            parsed['obj'] = None
-            return parsed
-        
-        # Determine the components of the question
-        components = []
-        for part in question:
-            if re.search(r'[bB]\d*', part):
-                components.append(part.capitalize())
-        if parsed['obj'] == 'move':
-            for part in question:
-                if re.search(r'\[\d*,\d*\]', part):
-                    components.append(str(list(eval(part))))
-
-        parsed['comps'] = components
-
-        return parsed
-
-    def question_aire(self):
-        """this is the main method that handles all I/O with the user and uses the other methds to do its job"""
-        while True:
-            q = input("Question: ")
-            if q == 'e' or q == 'exit':
-                break
-            parsed = self.parse_question(q)
-            answer = self.answer_question(parsed)
-            print("Answer:", answer, '\n')
-    
-    def search_tree(self, item, return_index=False):
-        """And auxillary method to aid in answering questions by searching for item in the goal tree. when return_index = True,
-        item's index in the goal tree is also returned"""
-        for i, e in enumerate(self.goal_tree):
-            if e == item:
-                return (item, i) if return_index else item
-        else:
-            raise KeyError("Search term not found!")
-    
-    def answer_question(self, parsed_question: dict):
-        """This is the method that actually answers question by taking as input a parsed question"""
-        final_answer = "I didn't do that"
-        try:
-            obj, components, q_type = parsed_question['obj'], parsed_question['comps'], parsed_question['type']
-        except KeyError:
-            return "Invalid question"
-
-        # This if statement is needed bcz the structure of items for clt and others is slightly different and it may be changed.
-        if obj == 'clt':
-            search_term = [obj, components[0]]
-        else:
-            search_term = [obj, components]
-
-        # If the action said in parsed question is not found in the goal tree then there is no point continuing
-        try:
-            searched_item = self.search_tree(search_term, True)
-        except KeyError:
-            return final_answer
-        
-        # The following block comes up with an answer to all possible scenarios
-        if q_type == 'how':
-            if obj == 'put_on':
-                if search_term in self.goal_tree:
-                    final_answer = f"By first clearing the top of {components[1]} and then of {components[0]} and then moving {components[0]} to the top of {components[1]}"
-            
-            elif obj == 'clt' and search_term in self.goal_tree:
-                final_answer = "By moving "
-                l = self.goal_tree[searched_item[1]+1:]  # part of the goal tree where our solution exists
-
-                for o, c in l:
-                    if o is not 'move':
-                        break
-                    final_answer += f"{str(c[0])} to {str(c[1])} and "
-                final_answer = final_answer[:-5]
-        
-        elif q_type == 'why':
-            if obj == 'put_on' and search_term in self.goal_tree:
-                final_answer = "Because you told me to"
-
-            elif obj == 'clt' and search_term in self.goal_tree:
-                l = self.goal_tree[:searched_item[1]]
-                for o, c in reversed(l):
-                    if o is 'put_on':
-                        final_answer = f"To put {c[0]} on top of {c[1]}"
-                        break
-                    else:
-                        continue
-            
-            elif obj == 'move':
-                index = searched_item[1]
-                l = self.goal_tree[:index]
-
-                if index+1 == len(self.goal_tree):
-                    last_move = True
-                
-                elif self.goal_tree[index+1][0] == 'put_on':
-                    last_move = True
-                
-                else:
-                    last_move = False
-
-                for o, c in reversed(l):
-
-                    if o == 'put_on':
-                        final_answer = f"To put {c[0]} on top of {c[1]}"
-                        break
-
-                    elif o == 'clt' and last_move is False:
-                        final_answer = f"To clear the top of {c}"
-                        break
-
-        return final_answer
-        
-        
-if __name__ == "__main__":
-    t = Table((200, 200), (4, 6))
-    interaface = Interface(t)
-    boxes = [Box((i, j), t) for i, j in [(3, 0), (3, 1), (3, 2), (2, 0), (2, 1), (2, 2), (1, 1), (1, 2), (0, 2)]]
-    boxes = {str(x): x for x in boxes}
-    t.event_loop()
