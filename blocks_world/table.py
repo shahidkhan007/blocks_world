@@ -251,6 +251,7 @@ class Table:
         """This is where all the action happens"""
         self.surface = pygame.display.set_mode((800, 600))
 
+        # This is where all the command giving happens
         self.put_on(boxes['B2'], boxes['B3'])
         interface.question_aire()
         
