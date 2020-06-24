@@ -1,7 +1,7 @@
 import pygame
-from .table import Table
-from .interface import Interface
-from .box import Box
+from blocks_world.table import Table
+from blocks_world.interface import Interface
+from blocks_world.box import Box
 pygame.font.init()
 
         

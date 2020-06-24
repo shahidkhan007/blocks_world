@@ -1,14 +1,13 @@
 import pygame
 import numpy as np
 from . import box_color
-from .table import Table
 
 class Box:
     size = 50
     boxes = []
     boxes_names = []
 
-    def __init__(self, loc: tuple or list, table: Table, name=None):
+    def __init__(self, loc: tuple or list, table, name=None):
         self.loc = np.array(
             loc)  # location of the box in table in Row x Columnn format, updated manually to allow for animation
         self.loc_xy = np.array([self.loc[1], self.loc[0]])  # location of the box in table in x-axis, y-axis format

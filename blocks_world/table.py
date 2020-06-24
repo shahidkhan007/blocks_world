@@ -1,6 +1,6 @@
 import numpy as np
 import pygame
-from box import Box
+from .box import Box
 from . import color
 pygame.font.init()
 
