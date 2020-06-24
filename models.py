@@ -1,5 +1,6 @@
 import numpy as np
 import pygame
+import re
 pygame.font.init()
 
 color = {
@@ -34,6 +35,7 @@ class Table:
         self.hand_motion_bias = (self.hand_motion_bias_x, self.hand_motion_bias_y)
         self.hand_loc = np.array((0, 0))  # means its 50 pixels above the table on its first column
         self.goal_tree = []
+        self.clock = pygame.time.Clock()
 
         # The xy format is a format in which values mean (got this units in x-axis, go this units in y-axis) while row x column format means
         # (go this many rows in the table, go this many columns in the table)
@@ -132,8 +134,10 @@ class Table:
             direction_int = (0, 1)
         
         direction_int = np.array(direction_int)
-        step_size = 1
+        step_size = 5
         for _ in range(0, magnitude, step_size):
+            self.clock.tick(300)
+            # print(self.clock.get_fps())
             if self.in_hand:  # if the hand is holding something that will move with the Hand
                 self.in_hand.box_motion_bias_x += step_size * direction_int[0]
                 self.in_hand.box_motion_bias_y += step_size * direction_int[1]
@@ -218,6 +222,10 @@ class Table:
             raise Exception("No more space!")
 
     def clear_top(self, box, goal_sequence):
+        """This function clears the top of box graphically and logically.
+        First it find all boxes above it, finds space for them to move to and then moves. it dosent move boxes to column numbers
+         in goal sequence because other useful blocks will go there"""
+        self.goal_tree.append(['clt', str(box)])  # An entry in the goal tree to later be able to track the actions
         box_column = list(self.get_col(box.index[1]))
         box_row = box_column[:box.index[0]]
         boxes_above = [x for x in box_row if x]
@@ -225,11 +233,13 @@ class Table:
             self.pick_up(b)
             space = self.find_space(goal_sequence)
             self.put_down(space)
+            self.goal_tree.append(['move', [str(b), str(list(space))]])  # What happened in this loop is called a move, it can be a different method and this is an entry to track moves
 
     def put_on(self, box_1, box_2):
         """Puts box_1 on top of box_2 if possible.
         First it clears the top of box_1 and then that of box_2 and then puts box_1 on top of box_2"""
-
+        self.goal_tree.append(['put_on', [str(box_1), str(box_2)]])
+        
         goal_seq = [box_1.loc[1], box_2.loc[1]]
         # Check if box_2 is not at the top of its column
         if box_2.loc[0] == 0:
@@ -250,15 +260,17 @@ class Table:
         # If not, performing the move
         self.pick_up(box_1)
         self.put_down([box_2.index[0]-1, box_2.index[1]])
+        self.goal_tree.append(['move', [str(box_1), str([box_2.index[0]-1, box_2.index[1]])]])
 
     def event_loop(self):
+        """This is where all the action happens"""
         self.surface = pygame.display.set_mode((800, 600))
 
-        self.put_on(boxes['B3'], boxes['B2'])
         self.put_on(boxes['B2'], boxes['B3'])
+        interaface.question_aire()
         
-        pygame.time.Clock()
         while True:
+            self.clock.tick(300)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -269,6 +281,7 @@ class Table:
             self.render()
             
             pygame.display.update()
+
 
 class Box:
     size = 50
@@ -328,9 +341,148 @@ class Box:
         return "B" + str(self.name)
     
 
+class Interface:
+    def __init__(self, table):
+        self.table = table
+        self.goal_tree = self.table.goal_tree
+        self.box_names = Box.boxes_names
 
+    def parse_question(self, question: str):
+        """This method parses the queston and creates a dictionary that describes the question. Its type, objective and components"""
+        parsed = {}
+        question = question.lower().split(' ')
+
+        # Determine the type of question
+        if 'how' in question:
+            parsed['type'] = 'how'
+        elif 'why' in question:
+            parsed['type'] = 'why'
+        else:
+            parsed['type'] = None
+            return parsed
+        
+        # Determine the objective of the question
+        if 'put' in question:
+            parsed['obj'] = 'put_on'
+        elif 'clear' in question and 'top' in question:
+            parsed['obj'] = 'clt'
+        elif parsed['type'] == 'why' and 'move' in question:
+            parsed['obj'] = 'move'
+        else:
+            parsed['obj'] = None
+            return parsed
+        
+        # Determine the components of the question
+        components = []
+        for part in question:
+            if re.search(r'[bB]\d*', part):
+                components.append(part.capitalize())
+        if parsed['obj'] == 'move':
+            for part in question:
+                if re.search(r'\[\d*,\d*\]', part):
+                    components.append(str(list(eval(part))))
+
+        parsed['comps'] = components
+
+        return parsed
+
+    def question_aire(self):
+        """this is the main method that handles all I/O with the user and uses the other methds to do its job"""
+        while True:
+            q = input("Question: ")
+            if q == 'e' or q == 'exit':
+                break
+            parsed = self.parse_question(q)
+            answer = self.answer_question(parsed)
+            print("Answer:", answer, '\n')
+    
+    def search_tree(self, item, return_index=False):
+        """And auxillary method to aid in answering questions by searching for item in the goal tree. when return_index = True,
+        item's index in the goal tree is also returned"""
+        for i, e in enumerate(self.goal_tree):
+            if e == item:
+                return (item, i) if return_index else item
+        else:
+            raise KeyError("Search term not found!")
+    
+    def answer_question(self, parsed_question: dict):
+        """This is the method that actually answers question by taking as input a parsed question"""
+        final_answer = "I didn't do that"
+        try:
+            obj, components, q_type = parsed_question['obj'], parsed_question['comps'], parsed_question['type']
+        except KeyError:
+            return "Invalid question"
+
+        # This if statement is needed bcz the structure of items for clt and others is slightly different and it may be changed.
+        if obj == 'clt':
+            search_term = [obj, components[0]]
+        else:
+            search_term = [obj, components]
+
+        # If the action said in parsed question is not found in the goal tree then there is no point continuing
+        try:
+            searched_item = self.search_tree(search_term, True)
+        except KeyError:
+            return final_answer
+        
+        # The following block comes up with an answer to all possible scenarios
+        if q_type == 'how':
+            if obj == 'put_on':
+                if search_term in self.goal_tree:
+                    final_answer = f"By first clearing the top of {components[1]} and then of {components[0]} and then moving {components[0]} to the top of {components[1]}"
+            
+            elif obj == 'clt' and search_term in self.goal_tree:
+                final_answer = "By moving "
+                l = self.goal_tree[searched_item[1]+1:]  # part of the goal tree where our solution exists
+
+                for o, c in l:
+                    if o is not 'move':
+                        break
+                    final_answer += f"{str(c[0])} to {str(c[1])} and "
+                final_answer = final_answer[:-5]
+        
+        elif q_type == 'why':
+            if obj == 'put_on' and search_term in self.goal_tree:
+                final_answer = "Because you told me to"
+
+            elif obj == 'clt' and search_term in self.goal_tree:
+                l = self.goal_tree[:searched_item[1]]
+                for o, c in reversed(l):
+                    if o is 'put_on':
+                        final_answer = f"To put {c[0]} on top of {c[1]}"
+                        break
+                    else:
+                        continue
+            
+            elif obj == 'move':
+                index = searched_item[1]
+                l = self.goal_tree[:index]
+
+                if index+1 == len(self.goal_tree):
+                    last_move = True
+                
+                elif self.goal_tree[index+1][0] == 'put_on':
+                    last_move = True
+                
+                else:
+                    last_move = False
+
+                for o, c in reversed(l):
+
+                    if o == 'put_on':
+                        final_answer = f"To put {c[0]} on top of {c[1]}"
+                        break
+
+                    elif o == 'clt' and last_move is False:
+                        final_answer = f"To clear the top of {c}"
+                        break
+
+        return final_answer
+        
+        
 if __name__ == "__main__":
     t = Table((200, 200), (4, 6))
+    interaface = Interface(t)
     boxes = [Box((i, j), t) for i, j in [(3, 0), (3, 1), (3, 2), (2, 0), (2, 1), (2, 2), (1, 1), (1, 2), (0, 2)]]
     boxes = {str(x): x for x in boxes}
     t.event_loop()
