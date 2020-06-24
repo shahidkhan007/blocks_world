@@ -72,6 +72,11 @@ class Table:
         line_3 = [line_2[1], (self.loc[0] + width_1, self.loc[1])]
 
         return line_1, line_2, line_3
+
+    def write_text(self, text: str, size: int, color: tuple, loc: tuple):
+        font = pygame.font.SysFont("comicsansms", size)
+        text = font.render(text, True, color)
+        self.surface.blit(text, loc)
     
     def render(self):
         """Renders the Table and the Hand to self.surface"""
@@ -122,6 +127,7 @@ class Table:
         step_size = 5
         for _ in range(0, magnitude, step_size):
             self.clock.tick(300)
+            self.event_check()
             # print(self.clock.get_fps())
             if self.in_hand:  # if the hand is holding something that will move with the Hand
                 self.in_hand.box_motion_bias_x += step_size * direction_int[0]
@@ -204,7 +210,11 @@ class Table:
                 elif j == len(column)-1:
                     return (j, i)
         else:
+            print(self.pxsize)
+            self.write_text("Cant solve the problem!", 24, color['black'], (self.loc[1], self.loc[0] + self.pxsize[0] + 50))
+            pygame.display.update()
             raise Exception("No more space!")
+
 
     def clear_top(self, box, goal_sequence):
         """This function clears the top of box graphically and logically.
@@ -247,22 +257,22 @@ class Table:
         self.put_down([box_2.index[0]-1, box_2.index[1]])
         self.goal_tree.append(['move', [str(box_1), str([box_2.index[0]-1, box_2.index[1]])]])
 
+    @staticmethod
+    def event_check():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+
     def event_loop(self, interface, boxes):
         """This is where all the action happens"""
         self.surface = pygame.display.set_mode((800, 600))
 
-        self.put_on(boxes['B2'], boxes['B3'])
+        self.put_on(boxes['B19'], boxes['B20'])
         interface.question_aire()
-        
-        while True:
-            self.clock.tick(300)
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    quit()
 
-            self.surface.fill(color['bg'])
-            Box.render_all_boxes()
-            self.render()
-            
-            pygame.display.update()
+        # End display
+        print("End display begins")
+        while True:
+            self.event_check()
+
